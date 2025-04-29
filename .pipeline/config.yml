@@ -3,15 +3,47 @@ version: v1
 stages:
   - name: Build
     script:
-      # instala dependencias y construye tu app UI5
+      # 1) Instala dependencias y compila tu UI5
       - npm ci
       - npm run build
+      # 2) Empaqueta como MTA (si usas mta.yaml)
+      - mbt build --mtar
+      # 3) Genera el descriptor dinámico para CTMS
+      - |
+        APP_NAME="your-app"
+        APP_VERSION="1.0.0"
+        MTAR_PATH="./mta_archives/${APP_NAME}_${APP_VERSION}.mtar"
+        cat > transport.json <<EOF
+        {
+          "id": "${APP_NAME}-ctms",
+          "version": "${APP_VERSION}",
+          "resources": [
+            { "module": "mtar", "path": "${MTAR_PATH}" }
+          ]
+        }
+        EOF
 
-  - name: Deploy
+  - name: TransportAndDeploy
     script:
-      # autentica contra Cloud Foundry con las variables que el servicio CI/CD injecta
-      - cf api "$CF_API_ENDPOINT"
-      - cf auth "$CF_USERNAME" "$CF_PASSWORD"
+      # Autenticación en la subcuenta A (donde corre CTMS)
+      - cf api   "$CF_API_ENDPOINT"
+      - cf auth  "$CF_USERNAME" "$CF_PASSWORD"
       - cf target -o "$CF_ORG" -s "$CF_SPACE"
-      # empuja tu aplicación; asume que tienes un manifest.yml en la raíz
-      - cf push
+
+      # Dispara el transporte + deploy remoto en la subcuenta B
+      - cf update-service tms \
+          -c "{\"descriptor\":\"./transport.json\",\"route\":\"A→B\",\"destination\":\"ctms-to-b\"}"
+
+      # Espera activa hasta que CTMS confirme el transporte
+      - |
+        until cf service-key tms tms-sk --output json \
+             | grep -q '"status":"succeeded"'; do
+          echo "⏳ Esperando a que CTMS despliegue..."
+          sleep 5
+        done
+        echo "✅ Transporte y despliegue remoto completado."
+
+  - name: (Opcional) FinalCheck
+    script:
+      # Puedes añadir aquí un cf logs --recent o cualquier verificación extra
+      - echo "Pipeline terminado exitosamente."
