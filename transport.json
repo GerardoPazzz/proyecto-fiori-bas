@@ -1,0 +1,7 @@
+{
+    "id": "testcicd",
+    "version": "1.0.0",
+    "resources": [
+      { "module": "webapp", "path": "./webapp" }
+    ]
+  }
