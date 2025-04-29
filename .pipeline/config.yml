@@ -1,0 +1,17 @@
+version: v1
+
+stages:
+  - name: Build
+    script:
+      # instala dependencias y construye tu app UI5
+      - npm ci
+      - npm run build
+
+  - name: Deploy
+    script:
+      # autentica contra Cloud Foundry con las variables que el servicio CI/CD injecta
+      - cf api "$CF_API_ENDPOINT"
+      - cf auth "$CF_USERNAME" "$CF_PASSWORD"
+      - cf target -o "$CF_ORG" -s "$CF_SPACE"
+      # empuja tu aplicación; asume que tienes un manifest.yml en la raíz
+      - cf push
